@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
 using MessengerBot.Models;
+using Newtonsoft.Json.Linq;
 
 namespace MessengerBot.Controllers
 {
@@ -46,25 +47,25 @@ namespace MessengerBot.Controllers
         /// <param name="text">text</param>
         /// <param name="sender">sender id</param>
         /// <returns>json</returns>
-        private string GetMessageTemplate(string text, string sender)
+        private JObject GetMessageTemplate(string text, string sender)
         {
-            return $@"
-{{
-recipient: {{id: ""{sender}"" }},
-message: {{ text: ""{text}"" }}
-}}";
+            return JObject.FromObject(new
+            {
+                recipient = new { id = sender },
+                message = new { text = text }
+            });
         }
 
         /// <summary>
         /// send message
         /// </summary>
         /// <param name="json">json</param>
-        private async Task SendMessage(string json)
+        private async Task SendMessage(JObject json)
         {
             using (HttpClient client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                HttpResponseMessage res = await client.PostAsync($"https://graph.facebook.com/v2.6/me/messages?access_token={pageToken}", new StringContent(json, Encoding.UTF8, "application/json"));
+                HttpResponseMessage res = await client.PostAsync($"https://graph.facebook.com/v2.6/me/messages?access_token={pageToken}", new StringContent(json.ToString(), Encoding.UTF8, "application/json"));
             }
         }
     }
