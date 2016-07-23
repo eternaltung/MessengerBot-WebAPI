@@ -30,15 +30,20 @@ namespace MessengerBot.Controllers
         }
 
         [HttpPost]
-        public async Task Post([FromBody]WebhookModel value)
+        public async Task<HttpResponseMessage> Post([FromBody]WebhookModel value)
         {
+            if (value._object != "page")
+                return new HttpResponseMessage(HttpStatusCode.OK);
+
             foreach (var item in value.entry[0].messaging)
             {
-                if (item.message == null)
-                    break;
+                if (item.message == null && item.postback == null)
+                    continue;
                 else
                     await SendMessage(GetMessageTemplate(item.message.text, item.sender.id));
             }
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
 
         /// <summary>
