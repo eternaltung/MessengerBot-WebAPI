@@ -14,27 +14,27 @@ using Newtonsoft.Json.Linq;
 
 namespace MessengerBot.Controllers
 {
-    public class WebhookController : ApiController
-    {
-        string pageToken = "page token";
+	public class WebhookController : ApiController
+	{
+		string pageToken = "page token";
 		string appSecret = "app secret";
 
 		public HttpResponseMessage Get()
-        {
-            var querystrings = Request.GetQueryNameValuePairs().ToDictionary(x => x.Key, x => x.Value);
-            if (querystrings["hub.verify_token"] == "hello")
-            {
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(querystrings["hub.challenge"], Encoding.UTF8, "text/plain")
-                };
-            }
-            return new HttpResponseMessage(HttpStatusCode.Unauthorized);
-        }
+		{
+			var querystrings = Request.GetQueryNameValuePairs().ToDictionary(x => x.Key, x => x.Value);
+			if (querystrings["hub.verify_token"] == "hello")
+			{
+				return new HttpResponseMessage(HttpStatusCode.OK)
+				{
+					Content = new StringContent(querystrings["hub.challenge"], Encoding.UTF8, "text/plain")
+				};
+			}
+			return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+		}
 
-        [HttpPost]
-        public async Task<HttpResponseMessage> Post()
-        {
+		[HttpPost]
+		public async Task<HttpResponseMessage> Post()
+		{
 			var signature = Request.Headers.GetValues("X-Hub-Signature").FirstOrDefault().Replace("sha1=", "");
 			var body = await Request.Content.ReadAsStringAsync();
 			if (!VerifySignature(signature, body))
@@ -42,18 +42,18 @@ namespace MessengerBot.Controllers
 
 			var value = JsonConvert.DeserializeObject<WebhookModel>(body);
 			if (value._object != "page")
-                return new HttpResponseMessage(HttpStatusCode.OK);
+				return new HttpResponseMessage(HttpStatusCode.OK);
 
-            foreach (var item in value.entry[0].messaging)
-            {
-                if (item.message == null && item.postback == null)
-                    continue;
-                else
-                    await SendMessage(GetMessageTemplate(item.message.text, item.sender.id));
-            }
+			foreach (var item in value.entry[0].messaging)
+			{
+				if (item.message == null && item.postback == null)
+					continue;
+				else
+					await SendMessage(GetMessageTemplate(item.message.text, item.sender.id));
+			}
 
-            return new HttpResponseMessage(HttpStatusCode.OK);
-        }
+			return new HttpResponseMessage(HttpStatusCode.OK);
+		}
 
 		private bool VerifySignature(string signature, string body)
 		{
@@ -68,33 +68,33 @@ namespace MessengerBot.Controllers
 			return hashString.ToString().ToLower() == signature.ToLower();
 		}
 
-        /// <summary>
-        /// get text message template
-        /// </summary>
-        /// <param name="text">text</param>
-        /// <param name="sender">sender id</param>
-        /// <returns>json</returns>
-        private JObject GetMessageTemplate(string text, string sender)
-        {
-            return JObject.FromObject(new
-            {
-                recipient = new { id = sender },
-                message = new { text = text }
-            });
-        }
+		/// <summary>
+		/// get text message template
+		/// </summary>
+		/// <param name="text">text</param>
+		/// <param name="sender">sender id</param>
+		/// <returns>json</returns>
+		private JObject GetMessageTemplate(string text, string sender)
+		{
+			return JObject.FromObject(new
+			{
+				recipient = new { id = sender },
+				message = new { text = text }
+			});
+		}
 
-        /// <summary>
-        /// send message
-        /// </summary>
-        /// <param name="json">json</param>
-        private async Task SendMessage(JObject json)
-        {
-            using (HttpClient client = new HttpClient())
-            {
-                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                HttpResponseMessage res = await client.PostAsync($"https://graph.facebook.com/v2.6/me/messages?access_token={pageToken}", new StringContent(json.ToString(), Encoding.UTF8, "application/json"));
-            }
-        }
-    }
+		/// <summary>
+		/// send message
+		/// </summary>
+		/// <param name="json">json</param>
+		private async Task SendMessage(JObject json)
+		{
+			using (HttpClient client = new HttpClient())
+			{
+				client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+				HttpResponseMessage res = await client.PostAsync($"https://graph.facebook.com/v2.6/me/messages?access_token={pageToken}", new StringContent(json.ToString(), Encoding.UTF8, "application/json"));
+			}
+		}
+	}
 }
 
