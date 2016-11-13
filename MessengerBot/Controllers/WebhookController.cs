@@ -4,19 +4,22 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
 using MessengerBot.Models;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace MessengerBot.Controllers
 {
     public class WebhookController : ApiController
     {
-        string pageToken = "your fb page token";
+        string pageToken = "page token";
+		string appSecret = "app secret";
 
-        public HttpResponseMessage Get()
+		public HttpResponseMessage Get()
         {
             var querystrings = Request.GetQueryNameValuePairs().ToDictionary(x => x.Key, x => x.Value);
             if (querystrings["hub.verify_token"] == "hello")
@@ -30,9 +33,15 @@ namespace MessengerBot.Controllers
         }
 
         [HttpPost]
-        public async Task<HttpResponseMessage> Post([FromBody]WebhookModel value)
+        public async Task<HttpResponseMessage> Post()
         {
-            if (value._object != "page")
+			var signature = Request.Headers.GetValues("X-Hub-Signature").FirstOrDefault().Replace("sha1=", "");
+			var body = await Request.Content.ReadAsStringAsync();
+			if (!VerifySignature(signature, body))
+				return new HttpResponseMessage(HttpStatusCode.BadRequest);
+
+			var value = JsonConvert.DeserializeObject<WebhookModel>(body);
+			if (value._object != "page")
                 return new HttpResponseMessage(HttpStatusCode.OK);
 
             foreach (var item in value.entry[0].messaging)
@@ -45,6 +54,19 @@ namespace MessengerBot.Controllers
 
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
+
+		private bool VerifySignature(string signature, string body)
+		{
+			var hashString = new StringBuilder();
+			using (var crypto = new HMACSHA1(Encoding.UTF8.GetBytes(appSecret)))
+			{
+				var hash = crypto.ComputeHash(Encoding.UTF8.GetBytes(body));
+				foreach (var item in hash)
+					hashString.Append(item.ToString("X2"));
+			}
+
+			return hashString.ToString().ToLower() == signature.ToLower();
+		}
 
         /// <summary>
         /// get text message template
