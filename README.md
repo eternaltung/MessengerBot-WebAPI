@@ -12,7 +12,7 @@ This project is the template to build the Facebook Messenger Bot with  ASP.NET W
         string _verifyToken = "hello";
 ```
 - OR add to web.config.
-
+```
 <configuration>
   <configSections>
     <sectionGroup name="applicationSettings" type="System.Configuration.ApplicationSettingsGroup, System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089">
@@ -34,6 +34,7 @@ This project is the template to build the Facebook Messenger Bot with  ASP.NET W
   </applicationSettings>
   ...
 </configuration>
+```
 
 - Credentials are fetched from web.config ApplicationSettings when the CreateInstance method is called without a credentials parameter or if the parameterless constructor is used to initialize the MessengerPlatform class. This holds true for all types that inherit from Bot.Messenger.ApiBase. Here are is the code at the Controllers/WebhookController.cs 
 
