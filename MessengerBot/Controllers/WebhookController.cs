@@ -18,9 +18,13 @@ namespace MessengerBot.Controllers
 {
     public class WebhookController : ApiController
     {
-        string pageToken = "page token";
-        string appSecret = "app secret";
-        string verifyToken = "hello";
+        string _pageToken = "page token";
+        string _appSecret = "app secret";
+        string _verifyToken = "hello";
+
+        string _quickReplyPayload_IsUserMsg = "WAS_USER_MESSAGE";
+        string _quickReplyPayload_IsNotUserMsg = "WAS_NOT_USER_MESSAGE";
+
 
         private MessengerPlatform _Bot { get; set; }
 
@@ -38,7 +42,7 @@ namespace MessengerBot.Controllers
             ***/
 
             _Bot = MessengerPlatform.CreateInstance(
-                MessengerPlatform.CreateCredentials(appSecret, pageToken, verifyToken));
+                MessengerPlatform.CreateCredentials(_appSecret, _pageToken, _verifyToken));
         }
 
         public HttpResponseMessage Get()
@@ -74,9 +78,6 @@ namespace MessengerBot.Controllers
             if (webhookModel._Object != "page")
                 return new HttpResponseMessage(HttpStatusCode.OK);
 
-            string quickReplyPayload_IsUserMsg = "WAS_USER_MESSAGE";
-            string quickReplyPayload_IsNotUserMsg = "WAS_NOT_USER_MESSAGE";
-
             foreach (var entry in webhookModel.Entries)
             {
                 foreach (var evt in entry.Events)
@@ -90,17 +91,17 @@ namespace MessengerBot.Controllers
 
                         if (evt.EventType == WebhookEventType.PostbackRecievedCallback)
                         {
-                            await ProcessPostBack(evt.Sender.ID, userProfileRsp?.FirstName, evt.Postback, quickReplyPayload_IsUserMsg, quickReplyPayload_IsNotUserMsg);
+                            await ProcessPostBack(evt.Sender.ID, userProfileRsp?.FirstName, evt.Postback);
                         }
                         if (evt.EventType == WebhookEventType.MessageReceivedCallback)
                         {
                             if (evt.Message.IsQuickReplyPostBack)
-                                await ProcessPostBack(evt.Sender.ID, userProfileRsp?.FirstName, evt.Message.QuickReplyPostback, quickReplyPayload_IsUserMsg, quickReplyPayload_IsNotUserMsg);
+                                await ProcessPostBack(evt.Sender.ID, userProfileRsp?.FirstName, evt.Message.QuickReplyPostback);
                             else
                             {
                                 await _Bot.SendApi.SendTextAsync(evt.Sender.ID, $"We got your message {userProfileRsp?.FirstName}, to prove it, we'll send it back to you :)");
                                 await ResendMessageToUser(evt);
-                                await ConfirmIfCorrect(quickReplyPayload_IsUserMsg, quickReplyPayload_IsNotUserMsg, evt);
+                                await ConfirmIfCorrect(evt);
                             }
                         }
                     }
@@ -113,7 +114,7 @@ namespace MessengerBot.Controllers
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
 
-        private async Task ConfirmIfCorrect(string quickReplyPayload_IsUserMsg, string quickReplyPayload_IsNotUserMsg, WebhookEvent evt)
+        private async Task ConfirmIfCorrect(WebhookEvent evt)
         {
             SendApiResponse sendQuickReplyResponse = await _Bot.SendApi.SendTextAsync(evt.Sender.ID, "Is that you message?", new List<QuickReply>
             {
@@ -121,13 +122,13 @@ namespace MessengerBot.Controllers
                 {
                     ContentType = QuickReplyContentType.text,
                     Title = "Yes",
-                    Payload = quickReplyPayload_IsUserMsg
+                    Payload = _quickReplyPayload_IsUserMsg
                 },
                 new QuickReply
                 {
                     ContentType = QuickReplyContentType.text,
                     Title = "No",
-                    Payload = quickReplyPayload_IsNotUserMsg
+                    Payload = _quickReplyPayload_IsNotUserMsg
                 }
             });
 
@@ -161,11 +162,11 @@ namespace MessengerBot.Controllers
             LogSendApiResponse(response);
         }
 
-        private async Task ProcessPostBack(string userId, string username, Postback postback, string quickReplyPayload_IsUserMsg, string quickReplyPayload_IsNotUserMsg)
+        private async Task ProcessPostBack(string userId, string username, Postback postback)
         {
-            if (postback.Payload == quickReplyPayload_IsNotUserMsg)
+            if (postback.Payload == _quickReplyPayload_IsNotUserMsg)
                 await _Bot.SendApi.SendTextAsync(userId, $"Sorry about that {username}, try sending something else.");
-            else if (postback.Payload == quickReplyPayload_IsUserMsg)
+            else if (postback.Payload == _quickReplyPayload_IsUserMsg)
                 await _Bot.SendApi.SendTextAsync(userId, $"Yay! We got it.");
         }
 
