@@ -1,6 +1,6 @@
 # Facebook Messenger Bot WebAPI Template
 
-This project is the template to build the Facebook Messenger Bot with  ASP.NET Web API. This fork use the Bot.Messenger nuget library https://www.nuget.org/packages/Bot.Messenger/1.0.0
+This project is the template to build the Facebook Messenger Bot with  ASP.NET Web API. This fork uses the Bot.Messenger nuget library https://www.nuget.org/packages/Bot.Messenger/1.0.0
 
 ## Steps to run
 
@@ -44,8 +44,8 @@ This project is the template to build the Facebook Messenger Bot with  ASP.NET W
         {
             base.Initialize(controllerContext);
 
-            //_Bot = MessengerPlatform.CreateInstance();
-            //_Bot = new MessengerPlatform();
+            //_Bot = MessengerPlatform.CreateInstance(); //uses web.config ApplicationSettings values
+            //_Bot = new MessengerPlatform(); //uses web.config ApplicationSettings values
             _Bot = MessengerPlatform.CreateInstance(
                 MessengerPlatform.CreateCredentials(_appSecret, _pageToken, _verifyToken));
         }
