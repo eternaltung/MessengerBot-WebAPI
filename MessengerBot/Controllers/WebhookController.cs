@@ -8,93 +8,179 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
-using MessengerBot.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Bot.Messenger;
+using System.Web.Http.Controllers;
+using Bot.Messenger.Models;
 
 namespace MessengerBot.Controllers
 {
-	public class WebhookController : ApiController
-	{
-		string pageToken = "page token";
-		string appSecret = "app secret";
+    public class WebhookController : ApiController
+    {
+        string pageToken = "page token";
+        string appSecret = "app secret";
+        string verifyToken = "hello";
 
-		public HttpResponseMessage Get()
-		{
-			var querystrings = Request.GetQueryNameValuePairs().ToDictionary(x => x.Key, x => x.Value);
-			if (querystrings["hub.verify_token"] == "hello")
-			{
-				return new HttpResponseMessage(HttpStatusCode.OK)
-				{
-					Content = new StringContent(querystrings["hub.challenge"], Encoding.UTF8, "text/plain")
-				};
-			}
-			return new HttpResponseMessage(HttpStatusCode.Unauthorized);
-		}
+        private MessengerPlatform _Bot { get; set; }
 
-		[HttpPost]
-		public async Task<HttpResponseMessage> Post()
-		{
-			var signature = Request.Headers.GetValues("X-Hub-Signature").FirstOrDefault().Replace("sha1=", "");
-			var body = await Request.Content.ReadAsStringAsync();
-			if (!VerifySignature(signature, body))
-				return new HttpResponseMessage(HttpStatusCode.BadRequest);
+        protected override void Initialize(HttpControllerContext controllerContext)
+        {
+            base.Initialize(controllerContext);
 
-			var value = JsonConvert.DeserializeObject<WebhookModel>(body);
-			if (value._object != "page")
-				return new HttpResponseMessage(HttpStatusCode.OK);
+            /***Credentials are fetched from web.config ApplicationSettings when the CreateInstance
+            ----method is called without a credentials parameter or if the parameterless constructor
+            ----is used to initialize the MessengerPlatform class. This holds true for all types that inherit from
+            ----Bot.Messenger.ApiBase
 
-			foreach (var item in value.entry[0].messaging)
-			{
-				if (item.message == null && item.postback == null)
-					continue;
-				else
-					await SendMessage(GetMessageTemplate(item.message.text, item.sender.id));
-			}
+                _Bot = MessengerPlatform.CreateInstance();
+                _Bot = new MessengerPlatform();
+            ***/
 
-			return new HttpResponseMessage(HttpStatusCode.OK);
-		}
+            _Bot = MessengerPlatform.CreateInstance(
+                MessengerPlatform.CreateCredentials(appSecret, pageToken, verifyToken));
+        }
 
-		private bool VerifySignature(string signature, string body)
-		{
-			var hashString = new StringBuilder();
-			using (var crypto = new HMACSHA1(Encoding.UTF8.GetBytes(appSecret)))
-			{
-				var hash = crypto.ComputeHash(Encoding.UTF8.GetBytes(body));
-				foreach (var item in hash)
-					hashString.Append(item.ToString("X2"));
-			}
+        public HttpResponseMessage Get()
+        {
+            var querystrings = Request.GetQueryNameValuePairs().ToDictionary(x => x.Key, x => x.Value);
 
-			return hashString.ToString().ToLower() == signature.ToLower();
-		}
+            if (_Bot.Authenticator.VerifyToken(querystrings["hub.verify_token"]))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(querystrings["hub.challenge"], Encoding.UTF8, "text/plain")
+                };
+            }
 
-		/// <summary>
-		/// get text message template
-		/// </summary>
-		/// <param name="text">text</param>
-		/// <param name="sender">sender id</param>
-		/// <returns>json</returns>
-		private JObject GetMessageTemplate(string text, string sender)
-		{
-			return JObject.FromObject(new
-			{
-				recipient = new { id = sender },
-				message = new { text = text }
-			});
-		}
+            return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+        }
 
-		/// <summary>
-		/// send message
-		/// </summary>
-		/// <param name="json">json</param>
-		private async Task SendMessage(JObject json)
-		{
-			using (HttpClient client = new HttpClient())
-			{
-				client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-				HttpResponseMessage res = await client.PostAsync($"https://graph.facebook.com/v2.6/me/messages?access_token={pageToken}", new StringContent(json.ToString(), Encoding.UTF8, "application/json"));
-			}
-		}
-	}
+        [HttpPost]
+        public async Task<HttpResponseMessage> Post()
+        {
+            var body = await Request.Content.ReadAsStringAsync();
+
+            LogInfo("WebHook_Received", new Dictionary<string, string>
+            {
+                { "Request Body", body }
+            });
+
+            if (!_Bot.Authenticator.VerifySignature(Request.Headers.GetValues("X-Hub-Signature").FirstOrDefault(), body))
+                return new HttpResponseMessage(HttpStatusCode.BadRequest);
+
+            WebhookModel webhookModel = _Bot.ProcessWebhookRequest(body);
+
+            if (webhookModel._Object != "page")
+                return new HttpResponseMessage(HttpStatusCode.OK);
+
+            string quickReplyPayload_IsUserMsg = "WAS_USER_MESSAGE";
+            string quickReplyPayload_IsNotUserMsg = "WAS_NOT_USER_MESSAGE";
+
+            foreach (var entry in webhookModel.Entries)
+            {
+                foreach (var evt in entry.Events)
+                {
+                    if (evt.EventType == WebhookEventType.PostbackRecievedCallback
+                        || evt.EventType == WebhookEventType.MessageReceivedCallback)
+                    {
+                        await _Bot.SendApi.SendActionAsync(evt.Sender.ID, SenderAction.typing_on);
+
+                        var userProfileRsp = await _Bot.UserProfileApi.GetUserProfileAsync(evt.Sender.ID);
+
+                        if (evt.EventType == WebhookEventType.PostbackRecievedCallback)
+                        {
+                            await ProcessPostBack(evt.Sender.ID, userProfileRsp?.FirstName, evt.Postback, quickReplyPayload_IsUserMsg, quickReplyPayload_IsNotUserMsg);
+                        }
+                        if (evt.EventType == WebhookEventType.MessageReceivedCallback)
+                        {
+                            if (evt.Message.IsQuickReplyPostBack)
+                                await ProcessPostBack(evt.Sender.ID, userProfileRsp?.FirstName, evt.Message.QuickReplyPostback, quickReplyPayload_IsUserMsg, quickReplyPayload_IsNotUserMsg);
+                            else
+                            {
+                                await _Bot.SendApi.SendTextAsync(evt.Sender.ID, $"We got your message {userProfileRsp?.FirstName}, to prove it, we'll send it back to you :)");
+                                await ResendMessageToUser(evt);
+                                await ConfirmIfCorrect(quickReplyPayload_IsUserMsg, quickReplyPayload_IsNotUserMsg, evt);
+                            }
+                        }
+                    }
+
+                    await _Bot.SendApi.SendActionAsync(evt.Sender.ID, SenderAction.typing_off);
+
+                }
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+
+        private async Task ConfirmIfCorrect(string quickReplyPayload_IsUserMsg, string quickReplyPayload_IsNotUserMsg, WebhookEvent evt)
+        {
+            SendApiResponse sendQuickReplyResponse = await _Bot.SendApi.SendTextAsync(evt.Sender.ID, "Is that you message?", new List<QuickReply>
+            {
+                new QuickReply
+                {
+                    ContentType = QuickReplyContentType.text,
+                    Title = "Yes",
+                    Payload = quickReplyPayload_IsUserMsg
+                },
+                new QuickReply
+                {
+                    ContentType = QuickReplyContentType.text,
+                    Title = "No",
+                    Payload = quickReplyPayload_IsNotUserMsg
+                }
+            });
+
+            LogSendApiResponse(sendQuickReplyResponse);
+        }
+
+        private async Task ResendMessageToUser(WebhookEvent evt)
+        {
+            SendApiResponse response = new SendApiResponse();
+
+            if (evt.Message.Attachments == null)
+            {
+                string text = evt.Message?.Text;
+
+                if (string.IsNullOrWhiteSpace(text))
+                    text = "Hello :)";
+
+                response = await _Bot.SendApi.SendTextAsync(evt.Sender.ID, $"Your Message => {text}");
+            }
+            else
+            {
+                foreach (var attachment in evt.Message.Attachments)
+                {
+                    if (attachment.Type != AttachmentType.fallback && attachment.Type != AttachmentType.location)
+                    {
+                        response = await _Bot.SendApi.SendAttachmentAsync(evt.Sender.ID, attachment);
+                    }
+                }
+            }
+
+            LogSendApiResponse(response);
+        }
+
+        private async Task ProcessPostBack(string userId, string username, Postback postback, string quickReplyPayload_IsUserMsg, string quickReplyPayload_IsNotUserMsg)
+        {
+            if (postback.Payload == quickReplyPayload_IsNotUserMsg)
+                await _Bot.SendApi.SendTextAsync(userId, $"Sorry about that {username}, try sending something else.");
+            else if (postback.Payload == quickReplyPayload_IsUserMsg)
+                await _Bot.SendApi.SendTextAsync(userId, $"Yay! We got it.");
+        }
+
+        private static void LogSendApiResponse(SendApiResponse response)
+        {
+            LogInfo("SendApi Web Request", new Dictionary<string, string>
+            {
+                { "Response", response?.ToString() }
+            });
+        }
+
+        private static void LogInfo(string eventName, Dictionary<string, string> telemetryProperties)
+        {
+            //Log telemetry in DB or Application Insights
+        }
+    }
 }
 
