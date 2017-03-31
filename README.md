@@ -1,6 +1,6 @@
 # Facebook Messenger Bot WebAPI Template
 
-This project is the template to build the Facebook Messenger Bot with  ASP.NET Web API. This fork uses the Bot.Messenger nuget library https://www.nuget.org/packages/Bot.Messenger/1.0.0
+This project is the template to build the Facebook Messenger Bot with  ASP.NET Web API. This fork uses the Bot.Messenger library on nuget https://www.nuget.org/packages/Bot.Messenger and on github https://github.com/olisamaduka/Bot.Messenger
 
 ## Steps to run
 
@@ -36,20 +36,21 @@ This project is the template to build the Facebook Messenger Bot with  ASP.NET W
 </configuration>
 ```
 
-- Credentials are fetched from web.config ApplicationSettings when the CreateInstance method is called without a credentials parameter or if the parameterless constructor is used to initialize the MessengerPlatform class. This holds true for all types that inherit from Bot.Messenger.ApiBase. Here are is the code at the Controllers/WebhookController.cs 
+- Credentials are fetched from web.config ApplicationSettings when the CreateInstance method is called without a credentials parameter or if the parameterless constructor is used to initialize the Bot.Messenger.MessengerPlatform class. This holds true for all types that inherit from Bot.Messenger.ApiBase. Here are is the code at the Controllers/WebhookController.cs 
 
 ```csharp
-        private MessengerPlatform _Bot { get; set; }
+        private Bot.Messenger.MessengerPlatform _Bot { get; set; }
         protected override void Initialize(HttpControllerContext controllerContext)
         {
             base.Initialize(controllerContext);
 
-            //_Bot = MessengerPlatform.CreateInstance(); //uses web.config ApplicationSettings values
-            //_Bot = new MessengerPlatform(); //uses web.config ApplicationSettings values
-            _Bot = MessengerPlatform.CreateInstance(
-                MessengerPlatform.CreateCredentials(_appSecret, _pageToken, _verifyToken));
+            //_Bot = Bot.Messenger.MessengerPlatform.CreateInstance(); //uses web.config ApplicationSettings values
+            //_Bot = new Bot.Messenger.MessengerPlatform(); //uses web.config ApplicationSettings values
+            _Bot = Bot.Messenger.MessengerPlatform.CreateInstance(
+                Bot.Messenger.MessengerPlatform.CreateCredentials(_appSecret, _pageToken, _verifyToken));
         }
 ```
+> For more documentation on the Bot.Messenger library see https://github.com/olisamaduka/Bot.Messenger/blob/master/README.md
 
 - In the Facebook webhook setting page. Verify token is the value of the key "hub.verify_token".  (this sample is hello)
 
